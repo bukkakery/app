@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // -------------------------------------------------------------
+    // FUNCIONES DE CONTROL DE ACCESO BASADAS EN ROLES (RBAC)
+    // -------------------------------------------------------------
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' || 
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'admin@bukkakery.com'
+      );
+    }
+    
+    function isLaboratory() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'laboratory' || 
+        request.auth.token.role == 'lab' || 
+        isAdmin()
+      );
+    }
+    
+    function isOwner(participantId) {
+      return isAuthenticated() && (
+        request.auth.uid == participantId ||
+        request.auth.token.participantId == participantId
+      );
+    }
+
+    // -------------------------------------------------------------
+    // COLECCIÓN: USUARIOS Y PERFILES RBAC (/users/{userId})
+    // - Lectura: Usuario dueño o Administrador
+    // - Escritura: EXCLUSIVO ADMINISTRADOR
+    // -------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // COLECCIÓN: PARTICIPANTES (USUARIOS Y CASTING)
+    // - Lectura: Autenticados (con filtro por ID si no es Admin)
+    // - Creación / Eliminación: EXCLUSIVO ADMINISTRADOR
+    // - Edición crítica (balance, estado, casting): EXCLUSIVO ADMINISTRADOR
+    // - Edición médica (testResult, testDate, sampleNumber): LABORATORIO o ADMIN
+    // -------------------------------------------------------------
+    match /participants/{participantId} {
+      allow read: if isAuthenticated();
+      
+      allow create, delete: if isAdmin();
+      
+      allow update: if isAdmin() || (
+        isLaboratory() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['testDate', 'testResult', 'sampleNumber', 'renewalStatus'])
+      );
+    }
+
+    // -------------------------------------------------------------
+    // COLECCIÓN: RODAJES Y EVENTOS DE PRODUCCIÓN
+    // - Lectura: Autenticados
+    // - Escritura (Crear, Actualizar caché, Cambiar estado): EXCLUSIVO ADMINISTRADOR
+    // -------------------------------------------------------------
+    match /shoots/{shootCode} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // COLECCIÓN: ASISTENCIAS, TAQUILLAS Y LIQUIDACIONES
+    // - Lectura: Autenticados
+    // - Escritura crítica (Asignar taquilla, liquidar cobros, contratos): EXCLUSIVO ADMINISTRADOR
+    // -------------------------------------------------------------
+    match /attendances/{attendanceId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // COLECCIÓN: REGISTROS HISTÓRICOS Y LOGS DE RODAJE
+    // - Lectura: Autenticados
+    // - Registro de corridas, bonus y auditoría: EXCLUSIVO ADMINISTRADOR
+    // -------------------------------------------------------------
+    match /shot_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    match /historical_records/{recordId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------
+    // COLECCIÓN: COMENTARIOS Y NOTAS
+    // - Lectura: Autenticados
+    // - Creación: Usuarios autenticados
+    // - Modificación / Borrado: EXCLUSIVO ADMINISTRADOR
+    // -------------------------------------------------------------
+    match /comments/{commentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+  }
+}

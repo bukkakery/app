@@ -1,0 +1,6 @@
+{
+  "name": "Bukkakery Production Manager",
+  "description": "Sistema integral de gestión de rodajes, participantes, analíticas de laboratorio, control de acceso y balances estilo Monday.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
